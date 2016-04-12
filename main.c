@@ -5,16 +5,9 @@
 
 #include <stdio.h>
 #include <mpi.h>
-#include <string.h>
 #include <stdlib.h>
 
-
-
-
-
 int calculate_tour_distance(int * tour, int tour_size, int ** distances);
-int main(int argc, char **argv) {
-
 int **allocate_cells(int n_x, int n_y);
 void die(const char *error) __attribute__ ((const)) __attribute__ ((noreturn));
 void initialize_city_distances(char* filename, int** array, const int num_of_cities);
