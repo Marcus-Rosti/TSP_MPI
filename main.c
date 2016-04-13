@@ -1,16 +1,19 @@
 /**
  * @author: Marcus Rosti
- * @author: Atallah Hazbor
+ * @author: Atallah Hezbor
  */
 
 #include <stdio.h>
 #include <mpi.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
 
 int calculate_tour_distance(int * tour, int tour_size, int ** distances);
 int **allocate_cells(int n_x, int n_y);
 void die(const char *error) __attribute__ ((const)) __attribute__ ((noreturn));
 void initialize_city_distances(char* filename, int** array, const int num_of_cities);
+int ** generate_subproblems(int * tour, int tour_size, int num_of_cities);
 
 int main(int argc, char **argv)
 {
@@ -30,6 +33,12 @@ int main(int argc, char **argv)
 
 
     printf("%i\n",cityDistances[10][7]);
+
+    int test_tour[] = {0, 1, 2};        
+    printf("An example tour is [%d, %d, %d]\n",test_tour[0], test_tour[1], test_tour[2]);
+    int ** new_tours = generate_subproblems(test_tour, 3, 14);
+    printf("A new tour is [%d, %d, %d, %d] \n", new_tours[7][0], new_tours[7][1], new_tours[7][2], new_tours[7][3]);
+
     printf("Hello World\n");
 
     MPI_Finalize(); // Close MPI
@@ -59,11 +68,10 @@ int **allocate_cells(int num_cols, int num_rows)
     if (array[0] == NULL) die("Error allocating array!\n");
 
     int i;
-    for (i = 1; i < num_rows; i++) {
+    for (i = 1; i < num_rows; i++) {    	
         array[i] = array[0] + (i * num_cols);
     }
-
-
+    
     return array;
 }
 
@@ -95,4 +103,35 @@ void initialize_city_distances(char *filename,              // File pointer to c
     fclose(fp);
 }
 
+int ** generate_subproblems(int * tour, int tour_size, int num_of_cities) 
+{	
+	int i, j;
+	bool duplicate;
+	// there will be at most num_of_cities subproblems
+	// each with one more column than the current tour
+	// TODO: tighter upper bound?
+	int ** subproblems = allocate_cells(num_of_cities, num_of_cities);		
+	for (i = 0; i < num_of_cities; i++) {		
+		duplicate = false;
+		// Check if city already in tour
+		for (j = 0; j < tour_size; j++) 
+		{			
+			if (tour[j] == i) 
+			{
+				duplicate = true;
+				break;
+			}
+		}
+		if (duplicate)		
+			continue;
+		else 
+		{				
 
+			// copy the original tour								
+			memcpy((subproblems[i]), tour, tour_size * sizeof(int));			
+			// and add the new city to the end
+			subproblems[i][tour_size] = i;
+		}			
+	}
+	return subproblems;
+}
