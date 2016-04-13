@@ -1,4 +1,5 @@
 /**
+ *
  * @author: Marcus Rosti
  * @author: Atallah Hezbor
  */
@@ -158,6 +159,19 @@ int ** generate_subproblems(int * tour, int tour_size, int num_of_cities)
 }
 
 void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs) {
+    // Local vars
+    int global_lowest_cost = INT32_MAX; // The best path cost
+    int *best_path = malloc(num_of_cities * sizeof(int)); // The best path
+    best_path[0] = 0;   // Pick a random spot to start
+    // So why not 0
+
+    // Generate #nprocs sub problems
+    int **subproblems = allocate_cells(nprocs, num_of_cities);
+
+    for (int i = 0; i < nprocs; i++) {
+
+    }
+
 
 
 }
@@ -169,6 +183,8 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
  *
  */
 void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs) {
+    int local_lowest_cost = INT32_MAX;
+    int *my_path = malloc(num_of_cities * sizeof(int));
 
 }
 
