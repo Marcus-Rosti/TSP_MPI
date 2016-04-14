@@ -1,16 +1,10 @@
-typedef struct {
-  struct Node * next;
-  int value;
-} Node;
-
-typedef struct {
-  Node * head; 
-} List;
+#include <stdlib.h>
+#include <list.h>
 
 void add_node(List l, const int value)
 {
     Node * iter = l.head;
-    while (iter != NULL) iter = iter->next;
+    while (iter != NULL) iter = (Node *) iter->next;
     iter = malloc(sizeof(int) + sizeof(Node *));
     iter->value = value;
 }
@@ -18,8 +12,8 @@ void add_node(List l, const int value)
 void delete_node(List l, const int value)
 {
     Node * iter = l.head;
-    while (iter->next->value != value) iter = iter->next;
-    temp * next_next = iter->next;
+    while ( ((Node *)(iter -> next)) -> value  != value) iter = (Node *) iter->next;
+    Node *new_next = (Node *) iter->next;
     free(iter->next);
-    iter->next = new_next
+    iter->next = new_next;
 }

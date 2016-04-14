@@ -6,7 +6,9 @@ set(TSP_MPI_VERSION_MINOR 1)
 
 find_package(MPI REQUIRED)
 
+include_directories(lib)
 include_directories(${MPI_INCLUDE_PATH})
+add_subdirectory(lib)
 
 if ("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
     # using Clang
@@ -19,6 +21,7 @@ endif ()
 # add the executable
 add_executable(TSP_MPI main.c)
 
+target_link_libraries(TSP_MPI Linked_List)
 target_link_libraries(TSP_MPI ${MPI_LIBRARIES})
 
 if (MPI_COMPILE_FLAGS)

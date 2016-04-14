@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
-
+#include <list.h>
 
 
 // Array initializer
@@ -241,6 +241,10 @@ void slave(int **city_dist, const int num_of_cities, const int my_rank, const in
             MPI_Send(&distance, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
         }
     }
+
+
+
+    //MPI_SEND(results);
 
 }
 

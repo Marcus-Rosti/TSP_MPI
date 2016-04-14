@@ -1,0 +1,1 @@
+add_library(Linked_List list.h list.c)
