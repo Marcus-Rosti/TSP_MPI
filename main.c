@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdint.h>
+
+
 
 // Array initializer
 int **allocate_cells(int n_x, int n_y);
@@ -22,9 +25,9 @@ void initialize_city_distances(char *filename, int **array, const int num_of_cit
 void die(const char *error) __attribute__ ((const)) __attribute__ ((noreturn));
 
 // Processing workhorses
-void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs);
+void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
 
-void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs);
+void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
 
 // Helper function, gets the value of tour
 int calculate_tour_distance(int *tour, int tour_size, int **distances) __attribute__((pure));
@@ -55,9 +58,9 @@ int main(int argc, char **argv) {
     // Pick a coordination node / or just make it 0
     // TODO refactor this to be distributed
     if (rank == 0) // Make the first processor the master
-        master(cityDistances, num_of_cities, rank, nprocs);    
+        master(cityDistances, num_of_cities, rank, nprocs, 2);    
     else // Otherwise their supporting roles
-        slave(cityDistances, num_of_cities, rank, nprocs);
+        slave(cityDistances, num_of_cities, rank, nprocs, 2);
     //
     /////////////////////////////
 
@@ -158,18 +161,30 @@ int ** generate_subproblems(int * tour, int tour_size, int num_of_cities)
 	return subproblems;
 }
 
-void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs) {
-    // Local vars
-    int global_lowest_cost = INT32_MAX; // The best path cost
+void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
+    // Local vars    
+    // int global_lowest_cost = INT32_MAX; // The best path cost
     int *best_path = malloc(num_of_cities * sizeof(int)); // The best path
     best_path[0] = 0;   // Pick a random spot to start
     // So why not 0
 
-    // Generate #nprocs sub problems
-    int **subproblems = allocate_cells(nprocs, num_of_cities);
+    // Initialize the list of free nodes
+    int * free_list = (int *) malloc(nprocs * sizeof(int));
+    for (int i = 0; i < num_of_cities; i++)
+    {
+        free_list[i] = i;
+    }
 
-    for (int i = 0; i < nprocs; i++) {
+    // Generate subproblems
+    // int **subproblems = generate_subproblems(tour, 1, num_of_cities);
 
+    for (int i = 0; i < nprocs; i++) 
+    {
+        // send each process a certain number of tasks        
+        for (int j = 0; j < num_of_cities * num_of_cities; j+=size_of_work)
+        {
+            // MPI_Send(subproblems[j], j * num_of_cities, MPI_INT, i, 1, MPI_COMM_WORLD);         
+        }
     }
 
 
@@ -182,9 +197,15 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
  * Calculate a the cost of the path / find best path given results
  *
  */
-void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs) {
+void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     int local_lowest_cost = INT32_MAX;
     int *my_path = malloc(num_of_cities * sizeof(int));
 
+    // Don't need this many, but allocate_cells must be square
+    // int ** subproblems = allocate_cells(num_of_cities, num_of_cities);          
+    // MPI_Recieve(subproblems[0], size_of_work * size_of_work,)
+
 }
+
+
 
