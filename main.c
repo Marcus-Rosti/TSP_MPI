@@ -163,7 +163,7 @@ int ** generate_subproblems(int * tour, int tour_size, int num_of_cities)
 
 void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     // Local vars    
-    // int global_lowest_cost = INT32_MAX; // The best path cost
+    int global_lowest_cost = INT32_MAX; // The best path cost
     int *best_path = malloc(num_of_cities * sizeof(int)); // The best path
     best_path[0] = 0;   // Pick a random spot to start
     // So why not 0
@@ -175,17 +175,41 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
         free_list[i] = i;
     }
 
-    // Generate subproblems
-    // int **subproblems = generate_subproblems(tour, 1, num_of_cities);
+    // initialize a tour
+    int * tour = malloc (num_of_cities * sizeof(int));
+    tour[0] = 0;
+
+    // Generate subproblems for that tour
+    int **subproblems = generate_subproblems(tour, 1, num_of_cities);
 
     for (int i = 0; i < nprocs; i++) 
     {
         // send each process a certain number of tasks        
         for (int j = 0; j < num_of_cities * num_of_cities; j+=size_of_work)
         {
-            // MPI_Send(subproblems[j], j * num_of_cities, MPI_INT, i, 1, MPI_COMM_WORLD);         
+            MPI_Send(subproblems[j], j * num_of_cities, MPI_INT, i, 1, MPI_COMM_WORLD);         
         }
     }
+
+    // Receive Results from each process
+
+    int ** paths_to_explore = malloc(num_of_cities * num_of_cities * sizeof(int));
+    for (int i = 0; i < nprocs; i++) 
+    {
+        // send each process a certain number of tasks        
+        for (int j = 0; j < num_of_cities * num_of_cities; j+=size_of_work)
+        {
+            MPI_Recv(paths_to_explore[j], j * num_of_cities, MPI_INT, i, 1, MPI_COMM_WORLD);         
+            int * distance;
+            MPI_Recv(distance, 1, MPI_INT, i, 1, MPI_COMM_WORLD);         
+            if (distance < global_lowest_cost)
+            {
+                global_lowest_cost = distance;
+            }
+        }
+    }
+
+    // generate subproblems for paths to explore and send again
 
 
 
@@ -200,10 +224,23 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
 void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     int local_lowest_cost = INT32_MAX;
     int *my_path = malloc(num_of_cities * sizeof(int));
+    
 
     // Don't need this many, but allocate_cells must be square
-    // int ** subproblems = allocate_cells(num_of_cities, num_of_cities);          
-    // MPI_Recieve(subproblems[0], size_of_work * size_of_work,)
+    int ** subproblems = allocate_cells(num_of_cities, num_of_cities);    
+    // Receive work from master      
+    MPI_Recv(subproblems[0], num_of_cities * size_of_work, MPI_INT, 0, 1, MPI_COMM_WORLD);
+
+    for (int i = 0; i < size_of_work; i++)
+    {
+        int distance = calculate_tour_distance(subproblems[i], int tour_size, int **distances);
+        // If new best, send to master
+        if (distance < local_lowest_cost) 
+        {            
+            MPI_Send(subproblems[i], num_of_cities, MPI_INT, 0, 1, MPI_COMM_WORLD);
+            MPI_Send(&distance, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+        }
+    }
 
 }
 
