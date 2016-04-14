@@ -6,5 +6,11 @@ To build
 mkdir build
 cd build
 cmake ..
-make -j 4
+make -j 
+```
+
+To run
+```Bash
+cd build
+mpirun -n ${number of cores/computers} TSP_MPI 14 ../cities/city14.txt
 ```
