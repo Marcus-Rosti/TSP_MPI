@@ -17,7 +17,7 @@
 int **allocate_cells(int n_x, int n_y);
 
 // Given a tour of cities, return an array of all all possible next tours
-int fact(const int) __attribute__ ((const));
+int fact(const int) __attribute__ ((const)) __attribute__((unused));
 
 int ** generate_all_tours_of_depth(const int, const int);
 
@@ -83,9 +83,9 @@ int main(int argc, char **argv) {
 
 int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities) {
     int i;
-    int distance = 0;
+    int distance = distances[0][tour[1]];
     // Calculate distance to end of tour
-    for (i = 0; i < tour_size - 1; i++) {
+    for (i = 1; i < tour_size - 1; i++) {
         distance += distances[tour[i]][tour[i + 1]];
     }
     // Add distance back to start
@@ -141,7 +141,7 @@ int fact(const int n) {
 }
 
 int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
-    const int num_tours_to_generate = fact(num_of_cities-1)/fact(num_of_cities-depth-1);
+    //const int num_tours_to_generate = fact(num_of_cities-1)/fact(num_of_cities-depth-1);
 
     int * tour = malloc((unsigned long) num_of_cities*sizeof(int));
 
@@ -283,10 +283,49 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
     int ** work_array = generate_all_tours_of_depth(5,num_of_cities);
     int work_index = 0;
 
-
 }
 
-/** Algorithmf
+/**
+ * @arg int * tour          : partial path to search under
+ * @arg int num_of_cities   : total number of cities possible
+ * @arg int ** city_dist    : distance matrix
+ * @arg int current_size    : current tour length
+ * @arg int local_best      : best length according to the caller
+ */
+int * dfs(int * tour, const int num_of_cities, int **city_dist, const int current_size, int local_best) {
+
+    int my_best = local_best;
+    int * my_best_path = malloc((unsigned long)num_of_cities * sizeof(int));
+    memcpy(my_best,tour,num_of_cities * sizeof(int)); // just assume best path is the current tour
+
+    // Check to see if we've reached the max size, just return the last tour possible
+    if(current_size == num_of_cities) return generate_subproblems(tour, num_of_cities, num_of_cities)[0];
+
+    // If we're still alive, generate all of the subproblems
+    int ** subproblems = generate_subproblems(tour, current_size, num_of_cities);
+    const int num_subproblems = num_of_cities - current_size; // the number of possible subs remaining
+
+    // Now loop over all of the subproblems
+    for(int i = 0; i < num_subproblems; i++) {
+        // calculate the sub path cost for path at i
+        const int sub_path_cost = calculate_tour_distance(subproblems[i],current_size+1,city_dist,num_of_cities);
+        if(sub_path_cost > my_best) continue; // if it exceeds the cost continue
+
+        // otherwise get the best path from my subproblem
+        int * path = dfs(subproblems[i],num_of_cities,city_dist,current_size+1,local_best);
+
+        // if the best of my subproblem is better than local best
+        int tempCost = calculate_tour_distance(path,num_of_cities,city_dist,num_of_cities);
+        if(tempCost < my_best) {
+            memcpy(my_best_path,path,num_of_cities*sizeof(int)); // copy it into best path
+            my_best = tempCost;
+        }
+    }
+
+    return my_best_path;
+}
+
+/** Algorithm
  * Receive orders from Coordinator
  *
  * Calculate a the cost of the path / find best path given results
