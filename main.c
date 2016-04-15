@@ -34,7 +34,7 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
 void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
 
 // Helper function, gets the value of tour
-int calculate_tour_distance(int *tour, int tour_size, int **distances) __attribute__((pure));
+int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities);
 
 void printPath(const int num_of_cities, int *path);
 
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
     MPI_Finalize(); // Close MPI
 }
 
-int calculate_tour_distance(int *tour, int tour_size, int **distances) {
+int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities) {
     int i;
     int distance = 0;
     // Calculate distance to end of tour
@@ -89,7 +89,7 @@ int calculate_tour_distance(int *tour, int tour_size, int **distances) {
         distance += distances[tour[i]][tour[i + 1]];
     }
     // Add distance back to start
-    distance += distances[tour[tour_size]][tour[0]];
+    if(tour_size == num_cities) distance += distances[tour[tour_size-1]][tour[0]];
     return distance;
 }
 
@@ -165,8 +165,6 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
         free(iterCities);
     }
 
-    printPath(num_of_cities, depth2[2]);
-
     //////////////////////////////////////////////////////////////////
 
     int ** depth3 = allocate_cells(num_of_cities,(num_of_cities-1)*(num_of_cities-2)*(num_of_cities-3));
@@ -178,8 +176,6 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
             memcpy((depth3[(num_of_cities-3)*i + j]),iterCities[j],(unsigned long)  num_of_cities*sizeof(int));
         free(iterCities);
     }
-
-    printPath(num_of_cities, depth3[2]);
 
     //////////////////////////////////////////////////////////////////
 
@@ -193,8 +189,6 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
         free(iterCities);
     }
 
-    printPath(num_of_cities, depth4[2]);
-
     //////////////////////////////////////////////////////////////////
 
     int ** depth5 = allocate_cells(num_of_cities,(num_of_cities-1)*(num_of_cities-2)*(num_of_cities-3)*(num_of_cities-4)*(num_of_cities-5));
@@ -206,8 +200,6 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
             memcpy((depth5[(num_of_cities-5)*i + j]),iterCities[j],(unsigned long) num_of_cities*sizeof(int));
         free(iterCities);
     }
-
-    printPath(num_of_cities, depth5[2]);
 
     //////////////////////////////////////////////////////////////////
 
@@ -278,16 +270,23 @@ int ** generate_subproblems(int * tour, const int tour_size, const int num_of_ci
 }
 
 void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
-    // Local vars    
-    int global_lowest_cost = INT32_MAX; // The best path cost
+    // Local vars
+    int * first_path = malloc((unsigned long) num_of_cities*sizeof(int));
+    for(int i = 1; i < num_of_cities; i++) first_path[i]=i;
+    first_path[7] = 6;
+    first_path[6] = 7;
+    int global_lowest_cost = calculate_tour_distance(first_path,num_of_cities,city_dist,num_of_cities);
+    printPath(num_of_cities,first_path);
+    printf("Cost %i\n",global_lowest_cost);
     int *best_path = malloc((unsigned long)  num_of_cities * sizeof(int)); // The best path
 
-    generate_all_tours_of_depth(5,num_of_cities);
+    int ** work_array = generate_all_tours_of_depth(5,num_of_cities);
+    int work_index = 0;
 
 
 }
 
-/** Algorithm
+/** Algorithmf
  * Receive orders from Coordinator
  *
  * Calculate a the cost of the path / find best path given results
