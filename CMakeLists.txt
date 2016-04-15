@@ -12,7 +12,7 @@ add_subdirectory(lib)
 
 if ("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
     # using Clang
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Ofast -Weverything -pedantic")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Ofast -Wall -pedantic")
 elseif ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     # using Gcc
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -O3 -Wall")
@@ -21,7 +21,7 @@ endif ()
 # add the executable
 add_executable(TSP_MPI main.c)
 
-target_link_libraries(TSP_MPI Linked_List)
+#target_link_libraries(TSP_MPI Linked_List)
 target_link_libraries(TSP_MPI m)
 target_link_libraries(TSP_MPI ${MPI_LIBRARIES})
 

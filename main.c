@@ -10,7 +10,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
-#include <list.h>
 #include <math.h>
 
 // Array initializer
@@ -31,10 +30,10 @@ void die(const char *error) __attribute__ ((const)) __attribute__ ((noreturn));
 // Processing workhorses
 void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
 
-void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
+void slave(const int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
 
 // Helper function, gets the value of tour
-int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities);
+int calculate_tour_distance(int *tour, const int tour_size, const int **distances, const int num_cities);
 
 void printPath(const int num_of_cities, int *path);
 
@@ -55,7 +54,7 @@ int main(int argc, char **argv) {
 
     /////////////////////////////
     // Array Init
-    int **cityDistances = allocate_cells(num_of_cities, num_of_cities);
+    const int **cityDistances = allocate_cells(num_of_cities, num_of_cities);
     initialize_city_distances(file_location, cityDistances, num_of_cities);
     //
     /////////////////////////////
@@ -82,16 +81,38 @@ int main(int argc, char **argv) {
     MPI_Finalize(); // Close MPI
 }
 
-int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities) {
+int calculate_full_tour_distance(int *tour, const int **distances, const int num_cities) {
     int i;
     int distance = distances[0][tour[1]];
     // Calculate distance to end of tour
-    for (i = 1; i < tour_size - 1; i++) {
+    for (i = 1; i < num_cities-1; i++) {
+        if(tour[i]<=0) return INT32_MAX;
+        if(tour[i]>=num_cities) return INT32_MAX;
+        if(tour[i+1]<=0) return INT32_MAX;
+        if(tour[i+1]>=num_cities) return INT32_MAX;
         distance += distances[tour[i]][tour[i + 1]];
     }
     // Add distance back to start
-    if(tour_size == num_cities) distance += distances[tour[tour_size-1]][tour[0]];
+    distance += distances[tour[num_cities-1]][tour[0]];
     return distance;
+}
+
+int calculate_tour_distance(int *tour, const int tour_size, const int **distances, const int num_cities) {
+    if(tour_size == num_cities) {
+        return calculate_full_tour_distance(tour, distances, num_cities);
+    } else {
+        int i;
+        int distance = distances[0][tour[1]];
+        // Calculate distance to end of tour
+        for (i = 1; i < tour_size - 1; i++) {
+            if(tour[i] == 0) return INT32_MAX;
+            if(tour[i+1] == 0) return INT32_MAX;
+            distance += distances[tour[i]][tour[i + 1]];
+        }
+        // Add distance back to start
+        if(tour_size == num_cities) distance += distances[tour[tour_size-1]][tour[0]];
+        return distance;
+    }
 }
 
 // Allocates and returns a pointer to a 2D array of ints
@@ -150,8 +171,6 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
 
     int ** depth1 = generate_subproblems(tour,1,num_of_cities);
 
-    printPath(num_of_cities, depth1[2]);
-
     // TODO this desperately needs refactoring
     //////////////////////////////////////////////////////////////////
 
@@ -203,7 +222,10 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
     }
 
     //////////////////////////////////////////////////////////////////
-
+    free(depth1);
+    free(depth2);
+    free(depth3);
+    free(depth4);
     return depth5;
 
 }
@@ -283,15 +305,13 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
     first_path[6] = 7;
 
     int global_lowest_cost = calculate_tour_distance(first_path, num_of_cities, city_dist, num_of_cities);
-    printPath(num_of_cities, first_path);
-    printf("Cost %i\n", global_lowest_cost);
     int *best_path = malloc((unsigned long) num_of_cities * sizeof(int)); // The best path
 
     int **work_array = generate_all_tours_of_depth(5, num_of_cities);
     int work_index = 0;
     int initial_size = ((num_of_cities - 1) * (num_of_cities - 2) * (num_of_cities - 3) * (num_of_cities - 4) *
                         (num_of_cities - 5));
-    int proc_index = 0;
+    //int proc_index = 0;
     int kill_signal = 0;
 
 
@@ -299,7 +319,6 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
         // Send work and bound to each process
         // TODO: handle out of bounds when work not evenly divided
         for (int i = 1; i < nprocs; i++) {
-
             MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
             MPI_Isend(work_array[work_index], num_of_cities * size_of_work, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
             MPI_Isend(&global_lowest_cost, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
@@ -307,15 +326,13 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
         }
 
         // Receive best path from each process
-        for (int i = 1; i < nprocs; i++) {
-            MPI_Recv(received_path, num_of_cities, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
-            MPI_Recv(&received_value, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
+        for (int j = 1; j < nprocs; j++) {
+            MPI_Recv(received_path, num_of_cities, MPI_INT, j, 0, MPI_COMM_WORLD, &stat);
+            MPI_Recv(&received_value, 1, MPI_INT, j, 0, MPI_COMM_WORLD, &stat);
             if (received_value < global_lowest_cost) {
                 global_lowest_cost = received_value;
                 // swap best and received to not lose track of pointers
-                int *temp = best_path;
-                best_path = received_path;
-                received_path = best_path;
+                memcpy(best_path,received_path,(unsigned long) num_of_cities * sizeof(int));
             }
         }
     }
@@ -326,6 +343,7 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
     }
 
 }
+
 /**
  * @arg int * tour          : partial path to search under
  * @arg int num_of_cities   : total number of cities possible
@@ -333,36 +351,48 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
  * @arg int current_size    : current tour length
  * @arg int local_best      : best length according to the caller
  */
-int * dfs(int * tour, const int num_of_cities, int **city_dist, const int current_size, int local_best) {
-
-    int my_best = local_best;
-    int * my_best_path = malloc((unsigned long)num_of_cities * sizeof(int));
-    memcpy(my_best,tour,num_of_cities * sizeof(int)); // just assume best path is the current tour
+int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int current_size, int local_best) {
+    int * my_best_path = malloc((unsigned long) num_of_cities * sizeof(int));
 
     // Check to see if we've reached the max size, just return the last tour possible
-    if(current_size == num_of_cities) return generate_subproblems(tour, num_of_cities, num_of_cities)[0];
+    if(current_size+1 == num_of_cities) {
+        int** paths;
+        paths = generate_subproblems(tour, num_of_cities, num_of_cities);
+        memcpy(my_best_path, paths[0], (unsigned long) num_of_cities * sizeof(int));
+        free(paths[0]);
+    } else {
+        int my_best = local_best;
 
-    // If we're still alive, generate all of the subproblems
-    int ** subproblems = generate_subproblems(tour, current_size, num_of_cities);
-    const int num_subproblems = num_of_cities - current_size; // the number of possible subs remaining
+        memcpy(my_best_path, tour,
+               (unsigned long) num_of_cities * sizeof(int)); // just assume best path is the current tour
 
-    // Now loop over all of the subproblems
-    for(int i = 0; i < num_subproblems; i++) {
-        // calculate the sub path cost for path at i
-        const int sub_path_cost = calculate_tour_distance(subproblems[i],current_size+1,city_dist,num_of_cities);
-        if(sub_path_cost > my_best) continue; // if it exceeds the cost continue
+        // If we're still alive, generate all of the subproblems
+        int **subproblems;
+        subproblems = generate_subproblems(tour, current_size, num_of_cities);
+        const int num_subproblems = num_of_cities - current_size; // the number of possible subs remaining
 
-        // otherwise get the best path from my subproblem
-        int * path = dfs(subproblems[i],num_of_cities,city_dist,current_size+1,local_best);
+        // Now loop over all of the subproblems
+        for (int i = 0; i < num_subproblems; i++) {
+            // calculate the sub path cost for path at i
+            const int sub_path_cost = calculate_tour_distance(subproblems[i], current_size, city_dist,
+                                                              num_of_cities);
+            if (sub_path_cost > my_best) continue; // if it exceeds the cost continue
 
-        // if the best of my subproblem is better than local best
-        int tempCost = calculate_tour_distance(path,num_of_cities,city_dist,num_of_cities);
-        if(tempCost < my_best) {
-            memcpy(my_best_path,path,num_of_cities*sizeof(int)); // copy it into best path
-            my_best = tempCost;
+            // otherwise get the best path from my subproblem
+            int *path;
+            path = dfs(subproblems[i], num_of_cities, city_dist, current_size+1, my_best);
+            // if the best of my subproblem is better than local best
+            int tempCost = calculate_full_tour_distance(path, city_dist, num_of_cities);
+            if (tempCost < my_best) {
+                memcpy(my_best_path, path, (unsigned long) num_of_cities * sizeof(int)); // copy it into best path
+                my_best = tempCost;
+            }
+            free(path);
+
         }
-    }
 
+        free(subproblems[0]);
+    }
     return my_best_path;
 }
 
@@ -372,35 +402,42 @@ int * dfs(int * tour, const int num_of_cities, int **city_dist, const int curren
  * Calculate a the cost of the path / find best path given results
  *
  */
-void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {    
+void slave(const int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     MPI_Status stat;
     int local_lowest_cost = INT32_MAX;
     int stay_alive = 1;
-    int *my_path = malloc((unsigned long) num_of_cities * sizeof(int));
-    int test_val = 5;
-    int ** my_work = allocate_cells(num_of_cities, size_of_work);
 
+    int *local_best_path = malloc((unsigned long) num_of_cities * sizeof(int));
+    int ** my_work = allocate_cells(num_of_cities, size_of_work);
     while (true) {
-        MPI_Recv(&stay_alive, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);    
+        MPI_Recv(&stay_alive, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);
         if (stay_alive == -1) {
+            printf("Kill the %ith slave\n",my_rank);
             return;
         }
 
         // Receive work and bound from master
-        MPI_Recv(my_work, num_of_cities * size_of_work, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);    
-        MPI_Recv(&local_lowest_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);    
-                
-        // Send best path and distance to master
-        // TODO: use dfs
-        MPI_Send(my_path, num_of_cities, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(&test_val, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        
+        MPI_Recv(my_work[0], num_of_cities * size_of_work, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);
+        MPI_Recv(&local_lowest_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);
 
+        for(int i = 0; i < size_of_work; i++) {
+            int * best_dfs_path;
+            best_dfs_path = dfs(my_work[i], num_of_cities, city_dist, 6, local_lowest_cost);
+
+            int best_dfs_cost = calculate_full_tour_distance(best_dfs_path, city_dist, num_of_cities);
+
+            if(local_lowest_cost > best_dfs_cost) {
+                local_lowest_cost = best_dfs_cost;
+                memcpy(local_best_path, best_dfs_path, (unsigned long) num_of_cities * sizeof(int));
+                printf("Lowest cost: %i \t",local_lowest_cost);
+                printPath(num_of_cities,local_best_path);
+            }
+            free(best_dfs_path);
+        } // Finished all work
+        // Send best path and distance to master
+        MPI_Send(local_best_path, num_of_cities, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&local_lowest_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
     }
 
-    
 
 }
-
-
-
