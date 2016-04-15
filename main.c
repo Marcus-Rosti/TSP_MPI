@@ -11,7 +11,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <list.h>
-
+#include <math.h>
 
 // Array initializer
 int **allocate_cells(int n_x, int n_y);
@@ -59,15 +59,16 @@ int main(int argc, char **argv) {
     initialize_city_distances(file_location, cityDistances, num_of_cities);
     //
     /////////////////////////////
-
+    int initial_size = ((num_of_cities-1)*(num_of_cities-2)*(num_of_cities-3)*(num_of_cities-4)*(num_of_cities-5));    
+    int work_per_proc = initial_size / nprocs;
     /////////////////////////////
     // Pick a coordination node / or just make it 0
     // TODO refactor this to be distributed
     if (rank == 0) // Make the first processor the master
-        master(cityDistances, num_of_cities, rank, nprocs, 2);
-//    else // Otherwise their supporting roles
-//        slave(cityDistances, num_of_cities, rank, nprocs, 2);
-    //
+        master(cityDistances, num_of_cities, rank, nprocs, 10);
+    else // Otherwise their supporting roles
+        slave(cityDistances, num_of_cities, rank, nprocs, 10);
+    
     /////////////////////////////
 
     /////////////////////////////
@@ -271,18 +272,63 @@ int ** generate_subproblems(int * tour, const int tour_size, const int num_of_ci
 
 void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     // Local vars
+    MPI_Status stat;
+    MPI_Request req;
+
     int * first_path = malloc((unsigned long) num_of_cities*sizeof(int));
-    for(int i = 1; i < num_of_cities; i++) first_path[i]=i;
+    int * received_path = malloc((unsigned long) num_of_cities*sizeof(int));
+    int received_value;
+    for(int i = 0; i < num_of_cities; i++) first_path[i]=i;
     first_path[7] = 6;
     first_path[6] = 7;
-    int global_lowest_cost = calculate_tour_distance(first_path,num_of_cities,city_dist,num_of_cities);
+    
+    int global_lowest_cost = calculate_tour_distance(first_path,num_of_cities,city_dist,num_of_cities);    
     printPath(num_of_cities,first_path);
     printf("Cost %i\n",global_lowest_cost);
     int *best_path = malloc((unsigned long)  num_of_cities * sizeof(int)); // The best path
-
+    
     int ** work_array = generate_all_tours_of_depth(5,num_of_cities);
-    int work_index = 0;
+    int work_index = 0;    
+    int initial_size = ((num_of_cities-1)*(num_of_cities-2)*(num_of_cities-3)*(num_of_cities-4)*(num_of_cities-5));        
+    int proc_index = 0;
+    int kill_signal = 0;
+    
+    
+    
+    while(work_index != initial_size)
+    {        
+        // Send work and bound to each process
+        // TODO: handle out of bounds when work not evenly divided
+        for (int i = 1; i < nprocs; i++)
+        {   
+                  
+            MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+            MPI_Isend(work_array[work_index], num_of_cities * size_of_work, MPI_INT, i, 0, MPI_COMM_WORLD, &req);    
+            MPI_Isend(&global_lowest_cost, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);                            
+            work_index+=size_of_work;               
+        }
 
+        // Receive best path from each process
+        for (int i = 1; i < nprocs; i++)
+        {
+            MPI_Recv(received_path, num_of_cities, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);    
+            MPI_Recv(&received_value, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);                
+            if (received_value < global_lowest_cost)
+            {
+                global_lowest_cost = received_value;
+                // swap best and received to not lose track of pointers
+                int * temp = best_path;
+                best_path = received_path;
+                received_path = best_path;
+            }
+        }        
+    }  
+    // Send kill signal to other processes
+    kill_signal = -1;
+    for (int i = 1; i < nprocs; i++)
+    {           
+        MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);                    
+    }
 
 }
 
@@ -292,12 +338,33 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
  * Calculate a the cost of the path / find best path given results
  *
  */
-void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
+void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {    
+    MPI_Status stat;
     int local_lowest_cost = INT32_MAX;
+    int stay_alive = 1;
     int *my_path = malloc((unsigned long) num_of_cities * sizeof(int));
+    int test_val = 5;
+    int ** my_work = allocate_cells(num_of_cities, size_of_work);
 
+    while (true) {
+        MPI_Recv(&stay_alive, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);    
+        if (stay_alive == -1) {
+            return;
+        }
 
-    //MPI_SEND(results);
+        // Receive work and bound from master
+        MPI_Recv(my_work, num_of_cities * size_of_work, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);    
+        MPI_Recv(&local_lowest_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &stat);    
+                
+        // Send best path and distance to master
+        // TODO: use dfs
+        MPI_Send(my_path, num_of_cities, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&test_val, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        
+
+    }
+
+    
 
 }
 

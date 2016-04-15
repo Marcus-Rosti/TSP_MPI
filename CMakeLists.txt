@@ -22,6 +22,7 @@ endif ()
 add_executable(TSP_MPI main.c)
 
 target_link_libraries(TSP_MPI Linked_List)
+target_link_libraries(TSP_MPI m)
 target_link_libraries(TSP_MPI ${MPI_LIBRARIES})
 
 if (MPI_COMPILE_FLAGS)

@@ -3,6 +3,7 @@
 
 void add_node(List l, const int value)
 {
+    l.size++;
     Node * iter = l.head;
     while (iter != NULL) iter = (Node *) iter->next;
     iter = malloc(sizeof(int) + sizeof(Node *));
@@ -11,6 +12,7 @@ void add_node(List l, const int value)
 
 void delete_node(List l, const int value)
 {
+    l.size--;
     Node * iter = l.head;
     while ( ((Node *)(iter -> next)) -> value  != value) iter = (Node *) iter->next;
     Node *new_next = (Node *) iter->next;
