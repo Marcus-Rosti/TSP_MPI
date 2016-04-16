@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
-#include <math.h>
+#include <time.h>
 
 // Array initializer
 int **allocate_cells(int n_x, int n_y);
@@ -63,11 +63,12 @@ int main(int argc, char **argv) {
     /////////////////////////////
     // Pick a coordination node / or just make it 0
     // TODO refactor this to be distributed
+    time_t start_time = time(NULL);
     if (rank == 0) // Make the first processor the master
         master(cityDistances, num_of_cities, rank, nprocs, 10);
     else // Otherwise their supporting roles
         slave(cityDistances, num_of_cities, rank, nprocs, 10);
-    
+    printf("Time to calc: %li\n", time(NULL) - start_time);
     /////////////////////////////
 
     /////////////////////////////
@@ -166,6 +167,7 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
     //const int num_tours_to_generate = fact(num_of_cities-1)/fact(num_of_cities-depth-1);
 
     int * tour = malloc((unsigned long) num_of_cities*sizeof(int));
+    tour[0] = 0;
 
     //////////////////////////////////////////////////////////////////
 
