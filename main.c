@@ -86,12 +86,13 @@ int calculate_full_tour_distance(int *tour, const int **distances, const int num
     int distance = distances[0][tour[1]];
     // Calculate distance to end of tour
     for (i = 1; i < num_cities-1; i++) {
-        if(tour[i]<=0) return INT32_MAX;
-        if(tour[i]>=num_cities) return INT32_MAX;
-        if(tour[i+1]<=0) return INT32_MAX;
-        if(tour[i+1]>=num_cities) return INT32_MAX;
+        if(tour[i]   <= 0)          return INT32_MAX;
+        if(tour[i]   >= num_cities) return INT32_MAX;
+        if(tour[i+1] <= 0)          return INT32_MAX;
+        if(tour[i+1] >= num_cities) return INT32_MAX;
         distance += distances[tour[i]][tour[i + 1]];
     }
+
     // Add distance back to start
     distance += distances[tour[num_cities-1]][tour[0]];
     return distance;
@@ -110,7 +111,6 @@ int calculate_tour_distance(int *tour, const int tour_size, const int **distance
             distance += distances[tour[i]][tour[i + 1]];
         }
         // Add distance back to start
-        if(tour_size == num_cities) distance += distances[tour[tour_size-1]][tour[0]];
         return distance;
     }
 }
@@ -292,6 +292,17 @@ int ** generate_subproblems(int * tour, const int tour_size, const int num_of_ci
 	return subproblems;
 }
 
+bool valid_path(int * tour, const int num_of_cities) {
+    int * seen = calloc(num_of_cities,sizeof(int));
+    for(int i = 0; i < num_of_cities; i++) {
+        seen[tour[i]] = 1;
+    }
+    for(int i = 0; i < num_of_cities; i++) {
+        if(seen[i] == 0) return false;
+    }
+    return true;
+}
+
 void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     // Local vars
     MPI_Status stat;
@@ -353,46 +364,48 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
  */
 int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int current_size, int local_best) {
     int * my_best_path = malloc((unsigned long) num_of_cities * sizeof(int));
-
+    //printf("%i/%i\n",current_size,num_of_cities);
     // Check to see if we've reached the max size, just return the last tour possible
-    if(current_size+1 == num_of_cities) {
-        int** paths;
-        paths = generate_subproblems(tour, num_of_cities, num_of_cities);
-        memcpy(my_best_path, paths[0], (unsigned long) num_of_cities * sizeof(int));
-        free(paths[0]);
+    if(current_size == num_of_cities) {
+        //printPath(num_of_cities,tour);
+        memcpy(my_best_path, tour, (unsigned long) num_of_cities * sizeof(int));
+        //printPath(num_of_cities,my_best_path);
     } else {
         int my_best = local_best;
 
-        memcpy(my_best_path, tour,
-               (unsigned long) num_of_cities * sizeof(int)); // just assume best path is the current tour
+        memcpy(my_best_path, tour, (unsigned long) num_of_cities * sizeof(int)); // just assume best path is the current tour
 
         // If we're still alive, generate all of the subproblems
-        int **subproblems;
-        subproblems = generate_subproblems(tour, current_size, num_of_cities);
-        const int num_subproblems = num_of_cities - current_size; // the number of possible subs remaining
 
+        int **subproblems;
+        subproblems = generate_subproblems(my_best_path, current_size, num_of_cities);
+        const int num_subproblems = num_of_cities - current_size; // the number of possible subs remaining
+        //printf("Generating subprobs: %3i for\t",current_size);
+        //printPath(num_of_cities,tour);
         // Now loop over all of the subproblems
         for (int i = 0; i < num_subproblems; i++) {
             // calculate the sub path cost for path at i
-            const int sub_path_cost = calculate_tour_distance(subproblems[i], current_size, city_dist,
-                                                              num_of_cities);
+            const int sub_path_cost = calculate_tour_distance(subproblems[i], current_size, city_dist, num_of_cities);
+
             if (sub_path_cost > my_best) continue; // if it exceeds the cost continue
 
             // otherwise get the best path from my subproblem
             int *path;
             path = dfs(subproblems[i], num_of_cities, city_dist, current_size+1, my_best);
+
             // if the best of my subproblem is better than local best
             int tempCost = calculate_full_tour_distance(path, city_dist, num_of_cities);
-            if (tempCost < my_best) {
+            if (tempCost < my_best && valid_path(path,num_of_cities)) {
                 memcpy(my_best_path, path, (unsigned long) num_of_cities * sizeof(int)); // copy it into best path
                 my_best = tempCost;
+                printf("New best path: %i\t",my_best);
+                printPath(num_of_cities,my_best_path);
             }
             free(path);
-
         }
-
         free(subproblems[0]);
     }
+    //printf("Last dfs path %i --- \t",current_size); printPath(num_of_cities,my_best_path);
     return my_best_path;
 }
 
