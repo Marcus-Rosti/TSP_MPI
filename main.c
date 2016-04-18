@@ -28,12 +28,12 @@ void initialize_city_distances(char *filename, int **array, const int num_of_cit
 void die(const char *error) __attribute__ ((const)) __attribute__ ((noreturn));
 
 // Processing workhorses
-void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
+void master(int **city_dist, const int num_of_cities, const int nprocs, const int size_of_work);
 
-void slave(const int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
+void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work);
 
 // Helper function, gets the value of tour
-int calculate_tour_distance(int *tour, const int tour_size, const int **distances, const int num_cities);
+int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities);
 
 void printPath(const int num_of_cities, int *path);
 
@@ -54,18 +54,17 @@ int main(int argc, char **argv) {
 
     /////////////////////////////
     // Array Init
-    const int **cityDistances = allocate_cells(num_of_cities, num_of_cities);
+    int **cityDistances = allocate_cells(num_of_cities, num_of_cities);
     initialize_city_distances(file_location, cityDistances, num_of_cities);
     //
     /////////////////////////////
-    int initial_size = ((num_of_cities-1)*(num_of_cities-2)*(num_of_cities-3)*(num_of_cities-4)*(num_of_cities-5));    
-    int work_per_proc = initial_size / nprocs;
+
     /////////////////////////////
     // Pick a coordination node / or just make it 0
     // TODO refactor this to be distributed
     time_t start_time = time(NULL);
     if (rank == 0) // Make the first processor the master
-        master(cityDistances, num_of_cities, rank, nprocs, 10);
+        master(cityDistances, num_of_cities, nprocs, 10);
     else // Otherwise their supporting roles
         slave(cityDistances, num_of_cities, rank, nprocs, 10);
     if(rank == 0) printf("Time to calc: %li\n", time(NULL) - start_time);
@@ -82,7 +81,7 @@ int main(int argc, char **argv) {
     MPI_Finalize(); // Close MPI
 }
 
-int calculate_full_tour_distance(int *tour, const int **distances, const int num_cities) {
+int calculate_full_tour_distance(int *tour, int **distances, const int num_cities) {
     int i;
     int distance = distances[0][tour[1]];
     // Calculate distance to end of tour
@@ -99,7 +98,7 @@ int calculate_full_tour_distance(int *tour, const int **distances, const int num
     return distance;
 }
 
-int calculate_tour_distance(int *tour, const int tour_size, const int **distances, const int num_cities) {
+int calculate_tour_distance(int *tour, const int tour_size, int **distances, const int num_cities) {
     if(tour_size == num_cities) {
         return calculate_full_tour_distance(tour, distances, num_cities);
     } else {
@@ -231,11 +230,76 @@ int ** generate_all_tours_of_depth(const int depth, const int num_of_cities) {
     return depth5;
 
 }
+/**
+1. Albany, NY
+2. Albuquerque, NM
+3. Atlanta, GA
+4. Augusta, ME
+5. Baltimore, MD
+6. Billings, MT
+7. Birmingham, AL
+8. Boise, ID
+9. Boston, MA
+10. Buffalo, NY
+11. Charleston, SC
+12. Charleston, WV
+13. Charlotte, SC
+14. Cheyenne, WY
+15. Chicago, IL
+16. Cleveland, OH
+17. Columbia, SC
+ */
 
+__attribute__ ((pure)) char * get_city_name(const int num) {
+    switch (num) {
+        case 0:
+            return "Albany, NY";
+        case 1:
+            return "Albuquerque, NM";
+        case 2:
+            return "Atlanta, GA";
+        case 3:
+            return "Augusta, ME";
+        case 4:
+            return "Baltimore, MD";
+        case 5:
+            return "Billings, MT";
+        case 6:
+            return "Birmingham, AL";
+        case 7:
+            return "Boise, ID";
+        case 8:
+            return "Boston, MA";
+        case 9:
+            return "Buffalo, NY";
+        case 10:
+            return "Charleston, SC";
+        case 11:
+            return "Charleston, WV";
+        case 12:
+            return "Charlotte, NC";
+        case 13:
+            return "Cheyenne, WY";
+        case 14:
+            return "Chicago, IL";
+        case 15:
+            return "Cleveland, OH";
+        case 16:
+            return "Columbia, SC";
+        default:
+            return "Error";
+
+    }
+}
+
+// Helper function to print the path
 void printPath(const int num_of_cities, int *path) {
-    for(int i = 0; i < num_of_cities; i++)
-        printf("%2i  -> ",path[i]);
-    printf(" 0\n");
+    for(int i = 0; i < num_of_cities; i++) {
+        int city = path[i];
+        printf("%s  -> ",get_city_name(city)); // Number of the relevant city
+    }
+
+    printf(" %s\n\n",get_city_name(path[0]));
 }
 
 /**
@@ -305,7 +369,7 @@ bool valid_path(int * tour, const int num_of_cities) {
     return true;
 }
 
-void master(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
+void master(int **city_dist, const int num_of_cities, const int nprocs, const int size_of_work) {
     // Local vars
     MPI_Status stat;
     MPI_Request req;
@@ -361,7 +425,7 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
                 memcpy(best_path,received_path,(unsigned long) num_of_cities * sizeof(int));
             }
         }
-        printf("Calculated %i\n",work_index);
+        if(work_index%10000 == 0) printf("Calculated %i\n",work_index);
     }
     // Send kill signal to other processes
     // Ignoring those that were killed early
@@ -379,26 +443,22 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
  * @arg int current_size    : current tour length
  * @arg int local_best      : best length according to the caller
  */
-int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int current_size, int local_best) {
+int * dfs(int * tour, const int num_of_cities, int **city_dist, const int current_size, int local_best) {
     int * my_best_path = malloc((unsigned long) num_of_cities * sizeof(int));
-    //printf("%i/%i\n",current_size,num_of_cities);
     // Check to see if we've reached the max size, just return the last tour possible
     if(current_size == num_of_cities) {
-        //printPath(num_of_cities,tour);
         memcpy(my_best_path, tour, (unsigned long) num_of_cities * sizeof(int));
-        //printPath(num_of_cities,my_best_path);
     } else {
         int my_best = local_best;
 
         memcpy(my_best_path, tour, (unsigned long) num_of_cities * sizeof(int)); // just assume best path is the current tour
 
         // If we're still alive, generate all of the subproblems
-
         int **subproblems;
         subproblems = generate_subproblems(my_best_path, current_size, num_of_cities);
         const int num_subproblems = num_of_cities - current_size; // the number of possible subs remaining
-        //printf("Generating subprobs: %3i for\t",current_size);
-        //printPath(num_of_cities,tour);
+
+
         // Now loop over all of the subproblems
         for (int i = 0; i < num_subproblems; i++) {
             // calculate the sub path cost for path at i
@@ -415,7 +475,6 @@ int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int 
             if (tempCost < my_best && valid_path(path,num_of_cities)) {
                 memcpy(my_best_path, path, (unsigned long) num_of_cities * sizeof(int)); // copy it into best path
                 my_best = tempCost;
-                //printf("New best path: %i\t",my_best); printPath(num_of_cities,my_best_path);
             }
             free(path);
         }
@@ -424,7 +483,6 @@ int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int 
         free(subproblems);
 
     }
-    //printf("Last dfs path %i --- \t",current_size); printPath(num_of_cities,my_best_path);
     return my_best_path;
 }
 
@@ -434,7 +492,7 @@ int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int 
  * Calculate a the cost of the path / find best path given results
  *
  */
-void slave(const int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
+void slave(int **city_dist, const int num_of_cities, const int my_rank, const int nprocs, const int size_of_work) {
     MPI_Status stat;
     int local_lowest_cost = INT32_MAX;
     int stay_alive = 1;
