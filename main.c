@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         master(cityDistances, num_of_cities, rank, nprocs, 10);
     else // Otherwise their supporting roles
         slave(cityDistances, num_of_cities, rank, nprocs, 10);
-    printf("Time to calc: %li\n", time(NULL) - start_time);
+    if(rank == 0) printf("Time to calc: %li\n", time(NULL) - start_time);
     /////////////////////////////
 
     /////////////////////////////
@@ -328,6 +328,7 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
     int kill_signal = 0;
 
 
+
     while (work_index != initial_size) {
         // Send work and bound to each process
         // TODO: handle out of bounds when work not evenly divided
@@ -348,6 +349,7 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
                 memcpy(best_path,received_path,(unsigned long) num_of_cities * sizeof(int));
             }
         }
+        printf("Calculated %i\n",work_index);
     }
     // Send kill signal to other processes
     kill_signal = -1;
@@ -400,8 +402,7 @@ int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int 
             if (tempCost < my_best && valid_path(path,num_of_cities)) {
                 memcpy(my_best_path, path, (unsigned long) num_of_cities * sizeof(int)); // copy it into best path
                 my_best = tempCost;
-                printf("New best path: %i\t",my_best);
-                printPath(num_of_cities,my_best_path);
+                //printf("New best path: %i\t",my_best); printPath(num_of_cities,my_best_path);
             }
             free(path);
         }
