@@ -328,19 +328,31 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
     int kill_signal = 0;
 
 
-
-    while (work_index != initial_size) {
-        // Send work and bound to each process
-        // TODO: handle out of bounds when work not evenly divided
+    int num_killed = 0;
+    while (work_index < initial_size) {
+        // Send work and bound to each process        
         for (int i = 1; i < nprocs; i++) {
-            MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
-            MPI_Isend(work_array[work_index], num_of_cities * size_of_work, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+            if (work_index >= initial_size) // Case: out of work early
+            {
+                num_killed+=1;
+                int early_kill = -1;
+                MPI_Isend(&early_kill, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+            }
+            else if (work_index + size_of_work < initial_size) // Case: there is enough work to give
+            {
+				MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+				MPI_Isend(work_array[work_index], num_of_cities * size_of_work, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+            }
+			else if (work_index + size_of_work >= initial_size) { // Case: work left is less than size of work per proc
+				MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+				MPI_Isend(work_array[work_index], num_of_cities * (initial_size - work_index), MPI_INT, i, 0, MPI_COMM_WORLD, &req);
+			}
             MPI_Isend(&global_lowest_cost, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
-            work_index += size_of_work;
+            work_index += size_of_work;	
         }
 
-        // Receive best path from each process
-        for (int j = 1; j < nprocs; j++) {
+        // Receive best path from each process that wasn't killed
+        for (int j = 1; j < nprocs-num_killed; j++) {
             MPI_Recv(received_path, num_of_cities, MPI_INT, j, 0, MPI_COMM_WORLD, &stat);
             MPI_Recv(&received_value, 1, MPI_INT, j, 0, MPI_COMM_WORLD, &stat);
             if (received_value < global_lowest_cost) {
@@ -352,8 +364,9 @@ void master(int **city_dist, const int num_of_cities, const int my_rank, const i
         printf("Calculated %i\n",work_index);
     }
     // Send kill signal to other processes
+    // Ignoring those that were killed early
     kill_signal = -1;
-    for (int i = 1; i < nprocs; i++) {
+    for (int i = 1; i < nprocs-num_killed; i++) {
         MPI_Isend(&kill_signal, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req);
     }
 
