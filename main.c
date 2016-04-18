@@ -405,13 +405,10 @@ int * dfs(int * tour, const int num_of_cities, const int **city_dist, const int 
             }
             free(path);
         }
-        
-        for (int k = 0; k < num_of_cities; k++)                    
-        {
-            free(subproblems[k]);    
-        }
-        
+                    
+        free(subproblems[0]);
         free(subproblems);
+
     }
     //printf("Last dfs path %i --- \t",current_size); printPath(num_of_cities,my_best_path);
     return my_best_path;
