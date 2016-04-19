@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(TSP_MPI)
 # The version number.
-set(TSP_MPI_VERSION_MAJOR 0)
-set(TSP_MPI_VERSION_MINOR 1)
+set(TSP_MPI_VERSION_MAJOR 1)
+set(TSP_MPI_VERSION_MINOR 0)
 
 find_package(MPI REQUIRED)
 
